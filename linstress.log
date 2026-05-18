@@ -1,1 +1,6 @@
 2026-05-16 13:41:53,894 Starting 10 workers level=Maximum activity=1.0 priority=Normal duration=0
+2026-05-18 03:26:43,832 Starting 2 workers duration=5
+2026-05-18 03:26:43,834 Starting worker 1: activity=0.5 nic=0
+2026-05-18 03:26:43,910 Starting worker 2: activity=0.2 nic=0
+2026-05-18 03:26:48,918 Stopping workers
+2026-05-18 03:26:48,922 All workers stopped
