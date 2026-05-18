@@ -8,6 +8,15 @@ from typing import Optional, List
 
 from stress import StressWorker
 
+
+def configure_logging(logfile: str) -> None:
+    logging.basicConfig(filename=logfile, level=logging.INFO, format="%(asctime)s %(message)s")
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+    if not any(isinstance(handler, logging.StreamHandler) for handler in logging.getLogger().handlers):
+        logging.getLogger().addHandler(console_handler)
+
 try:
     import psutil
 except Exception:
@@ -33,7 +42,7 @@ class CLIStressRunner:
         self.priorities = priorities
         self.processes = []
 
-        logging.basicConfig(filename=logfile, level=logging.INFO, format="%(asctime)s %(message)s")
+        configure_logging(logfile)
 
     def start(self):
         # Build per-thread activity and priority lists
@@ -89,12 +98,16 @@ class CLIStressRunner:
                 except Exception:
                     priorities.append(self.PRIORITY_MAP.get(self.priority, 0))
 
-        logging.info(f"Starting {self.threads} workers duration={self.duration}")
+        msg = f"Starting {self.threads} workers duration={self.duration}"
+        print(msg)
+        logging.info(msg)
 
         for i in range(self.threads):
             activity = activities[i]
             nic = priorities[i]
-            logging.info(f"Starting worker {i+1}: activity={activity} nic={nic}")
+            info = f"Starting worker {i+1}: activity={activity} nic={nic}"
+            print(info)
+            logging.info(info)
             p = StressWorker.start_process(activity=activity, duration=self.duration if self.duration and self.duration > 0 else None)
             self._set_priority(p.pid, nic)
             self.processes.append(p)

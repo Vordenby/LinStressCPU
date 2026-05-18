@@ -14,13 +14,26 @@ except Exception:
     psutil = None
 
 
+def validate_tkinter() -> None:
+    try:
+        import tkinter
+    except Exception as exc:
+        raise RuntimeError("Tkinter is not available or cannot be initialized: %s" % exc)
+
+
 LEVEL_MAP = {"Low": 0.25, "Medium": 0.5, "Busy": 0.75, "Maximum": 1.0}
 PRIORITY_MAP = {"Normal": 0, "High": -5, "Realtime": -20}
 
 
 class LinStressGUI:
     def __init__(self):
+        validate_tkinter()
         logging.basicConfig(filename="linstress_gui.log", level=logging.INFO, format="%(asctime)s %(message)s")
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+        if not any(isinstance(handler, logging.StreamHandler) for handler in logging.getLogger().handlers):
+            logging.getLogger().addHandler(console_handler)
 
         self.root = tk.Tk()
         self.root.title("LinStress GUI")
