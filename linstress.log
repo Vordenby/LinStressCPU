@@ -16,3 +16,27 @@
 2026-05-18 04:07:05,811 Starting worker 1: activity=1.0 nic=0
 2026-05-18 04:07:06,821 Stopping workers
 2026-05-18 04:07:06,822 All workers stopped
+2026-05-18 04:26:38,834 Starting 20 workers duration=0
+2026-05-18 04:26:38,835 Starting worker 1: activity=1.0 nic=0
+2026-05-18 04:26:38,846 Starting worker 2: activity=1.0 nic=0
+2026-05-18 04:26:38,851 Starting worker 3: activity=1.0 nic=0
+2026-05-18 04:26:38,858 Starting worker 4: activity=1.0 nic=0
+2026-05-18 04:26:38,865 Starting worker 5: activity=1.0 nic=0
+2026-05-18 04:26:38,871 Starting worker 6: activity=1.0 nic=0
+2026-05-18 04:26:38,877 Starting worker 7: activity=1.0 nic=0
+2026-05-18 04:26:38,885 Starting worker 8: activity=1.0 nic=0
+2026-05-18 04:26:38,891 Starting worker 9: activity=1.0 nic=0
+2026-05-18 04:26:38,898 Starting worker 10: activity=1.0 nic=0
+2026-05-18 04:26:38,904 Starting worker 11: activity=1.0 nic=0
+2026-05-18 04:26:38,911 Starting worker 12: activity=1.0 nic=0
+2026-05-18 04:26:38,920 Starting worker 13: activity=1.0 nic=0
+2026-05-18 04:26:38,927 Starting worker 14: activity=1.0 nic=0
+2026-05-18 04:26:38,934 Starting worker 15: activity=1.0 nic=0
+2026-05-18 04:26:38,941 Starting worker 16: activity=1.0 nic=0
+2026-05-18 04:26:38,949 Starting worker 17: activity=1.0 nic=0
+2026-05-18 04:26:38,956 Starting worker 18: activity=1.0 nic=0
+2026-05-18 04:26:38,965 Starting worker 19: activity=1.0 nic=0
+2026-05-18 04:26:38,973 Starting worker 20: activity=1.0 nic=0
+2026-05-18 04:26:54,196 Interrupted by user
+2026-05-18 04:26:54,196 Stopping workers
+2026-05-18 04:26:54,211 All workers stopped
