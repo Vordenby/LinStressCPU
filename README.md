@@ -1,20 +1,17 @@
 # LinStressCPU
 
-English / Русский
+## English
 
-English
+### LinStressCPU is a Python analogue of CPUStres — a simple CPU stress tester.
 
-LinStressCPU is a Python analogue of CPUStres — a simple CPU stress tester.
-
-Usage (CLI):
+## Usage (CLI):
 
 Run with defaults (one worker per CPU, maximum load):
-
 ```
-python3 PythonVer/main.py
+python3 ./LinStress.py
 ```
 
-Options:
+### Options:
 
 ```
 -t, --threads N         number of worker processes (default: cpu count)
@@ -24,29 +21,17 @@ Options:
 --interactive           interactive text menu
 ```
 
-Example: run 4 workers at medium activity for 60 seconds:
+#### Example: run 4 workers at medium activity for 60 seconds:
 
 ```
 python3 PythonVer/main.py -t 4 -l medium -d 60
 ```
 
-GUI:
+## Russian
 
-```
-python3 PythonVer/gui.py
-```
+### LinStressCPU — Python-аналог CPUStres, утилита для нагрузочного тестирования CPU.
 
-Notes (Linux):
-
-- Priority uses Unix `nice` values: `Normal=0`, `High=-5`, `Realtime=-20` (negative values require root privileges).
-- `os.setpriority` (used by the app) works on Linux; `psutil` is used for better process monitoring when available.
-- To run realtime priority you must start the program as root or give the binary appropriate capabilities (e.g., `sudo` or `setcap`).
-
-Русский
-
-LinStressCPU — Python-аналог CPUStres, утилита для нагрузочного тестирования CPU.
-
-Использование (CLI):
+## Использование (CLI):
 
 Запуск с настройками по умолчанию (по количеству CPU, максимальная загрузка):
 
@@ -54,7 +39,7 @@ LinStressCPU — Python-аналог CPUStres, утилита для нагру�
 python3 PythonVer/main.py
 ```
 
-Опции:
+### Опции:
 
 ```
 -t, --threads N         количество процессов-воркеров (по умолчанию: число ядер CPU)
@@ -64,14 +49,8 @@ python3 PythonVer/main.py
 --interactive           интерактивное текстовое меню
 ```
 
-Пример: запустить 4 воркера на среднем уровне активности на 60 секунд:
+#### Пример: запустить 4 воркера на среднем уровне активности на 60 секунд:
 
 ```
 python3 PythonVer/main.py -t 4 -l medium -d 60
-```
-
-GUI:
-
-```
-python3 PythonVer/gui.py
 ```
