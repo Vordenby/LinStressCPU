@@ -22,7 +22,7 @@ def validate_tkinter() -> None:
 
 
 LEVEL_MAP = {"Low": 0.25, "Medium": 0.5, "Busy": 0.75, "Maximum": 1.0}
-PRIORITY_MAP = {"Normal": 0, "High": -5, "Realtime": -20}
+PRIORITY_MAP = {"Normal (0)": 0, "High (-5)": -5, "Realtime (-20)": -20}
 
 
 class LinStressGUI:
