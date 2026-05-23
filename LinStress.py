@@ -45,23 +45,19 @@ class CLIStressRunner:
         configure_logging(logfile)
 
     def start(self):
-        # Build per-thread activity and priority lists
         activities = []
         priorities = []
 
-        # Normalize levels
         if self.levels:
             raw_levels = self.levels
         else:
             raw_levels = [self.level]
 
-        # Normalize priorities
         if self.priorities:
             raw_priorities = self.priorities
         else:
             raw_priorities = [self.priority]
 
-        # Helper to expand/truncate lists to thread count
         def normalize_list(lst, default, count):
             if not lst:
                 return [default] * count
@@ -74,7 +70,6 @@ class CLIStressRunner:
         raw_levels = normalize_list(raw_levels, self.level, self.threads)
         raw_priorities = normalize_list(raw_priorities, self.priority, self.threads)
 
-        # Convert levels to activity floats
         for lv in raw_levels:
             lv = lv.strip()
             if lv in self.LEVEL_MAP:
