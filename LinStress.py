@@ -5,16 +5,8 @@ import logging
 import os
 from typing import Optional, List
 
+from logging_utils import close_application_logging, configure_application_logging
 from stress import StressWorker
-
-
-def configure_logging(logfile: str) -> None:
-    logging.basicConfig(filename=logfile, level=logging.INFO, format="%(asctime)s %(message)s")
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
-    if not any(isinstance(handler, logging.StreamHandler) for handler in logging.getLogger().handlers):
-        logging.getLogger().addHandler(console_handler)
 
 try:
     import psutil
@@ -40,8 +32,7 @@ class CLIStressRunner:
         self.levels = levels
         self.priorities = priorities
         self.processes = []
-
-        configure_logging(logfile)
+        self.logger = configure_application_logging(app_name="linstress_cli", base_dir=os.path.dirname(os.path.abspath(__file__)))
 
     def start(self):
         activities = []
@@ -94,17 +85,18 @@ class CLIStressRunner:
 
         msg = f"Starting {self.threads} workers duration={self.duration}"
         print(msg)
-        logging.info(msg)
+        logging.info("CLI start requested: threads=%s duration=%s level=%s priority=%s", self.threads, self.duration, self.level, self.priority)
 
         for i in range(self.threads):
             activity = activities[i]
             nic = priorities[i]
             info = f"Starting worker {i+1}: activity={activity} nic={nic}"
             print(info)
-            logging.info(info)
+            logging.info("CLI worker %s/%s configured: activity=%s nic=%s", i + 1, self.threads, activity, nic)
             p = StressWorker.start_process(activity=activity, duration=self.duration if self.duration and self.duration > 0 else None)
             self._set_priority(p.pid, nic)
             self.processes.append(p)
+            logging.info("CLI worker %s started with pid=%s", i + 1, p.pid)
 
         try:
             if self.duration and self.duration > 0:
@@ -115,25 +107,32 @@ class CLIStressRunner:
                 while True:
                     time.sleep(1)
         except KeyboardInterrupt:
-            logging.info("Interrupted by user")
+            logging.info("CLI interrupted by user")
         finally:
             self.stop()
+            close_application_logging(self.logger)
 
     def stop(self):
-        logging.info("Stopping workers")
+        if not self.processes:
+            logging.info("CLI stop requested with no active workers")
+            return
+
+        logging.info("Stopping %s workers", len(self.processes))
         for p in self.processes:
             try:
                 if p.is_alive():
+                    logging.info("CLI terminating worker pid=%s", p.pid)
                     p.terminate()
             except Exception as e:
-                logging.info(f"Error terminating process {p.pid}: {e}")
+                logging.warning("CLI error terminating process %s: %s", p.pid, e)
 
         for p in self.processes:
             try:
-                p.join()
-            except Exception:
-                pass
+                p.join(timeout=1)
+            except Exception as e:
+                logging.warning("CLI error joining process %s: %s", p.pid, e)
 
+        self.processes = []
         logging.info("All workers stopped")
 
     def _set_priority(self, pid: int, nic: Optional[int] = None):
@@ -145,8 +144,9 @@ class CLIStressRunner:
                 p.nice(nic)
             else:
                 os.setpriority(os.PRIO_PROCESS, pid, nic)
-        except Exception:
-            pass
+            logging.info("CLI set worker priority pid=%s nic=%s", pid, nic)
+        except Exception as exc:
+            logging.warning("CLI failed to set worker priority pid=%s nic=%s: %s", pid, nic, exc)
 
 
 def parse_args():
