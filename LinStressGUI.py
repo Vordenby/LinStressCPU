@@ -6,6 +6,7 @@ import os
 import time
 from typing import List, Optional
 
+from logging_utils import close_application_logging, configure_application_logging
 from stress import StressWorker
 
 try:
@@ -28,15 +29,11 @@ PRIORITY_MAP = {"Normal (0)": 0, "High (-5)": -5, "Realtime (-20)": -20}
 class LinStressGUI:
     def __init__(self):
         validate_tkinter()
-        logging.basicConfig(filename="linstress_gui.log", level=logging.INFO, format="%(asctime)s %(message)s")
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
-        console_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
-        if not any(isinstance(handler, logging.StreamHandler) for handler in logging.getLogger().handlers):
-            logging.getLogger().addHandler(console_handler)
+        self.logger = configure_application_logging(app_name="linstress_gui", base_dir=os.path.dirname(os.path.abspath(__file__)))
 
         self.root = tk.Tk()
         self.root.title("LinStress GUI")
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         self.max_cpus = multiprocessing.cpu_count()
 
@@ -57,7 +54,7 @@ class LinStressGUI:
         ttk.OptionMenu(controls, self.default_level, self.default_level.get(), *LEVEL_MAP.keys()).grid(row=1, column=1, sticky=tk.W)
 
         ttk.Label(controls, text="Default Priority:").grid(row=1, column=2, sticky=tk.W, padx=(10, 0))
-        self.default_prio = tk.StringVar(value="Normal")
+        self.default_prio = tk.StringVar(value="Normal (0)")
         ttk.OptionMenu(controls, self.default_prio, self.default_prio.get(), *PRIORITY_MAP.keys()).grid(row=1, column=3, sticky=tk.W)
 
         btn_frame = ttk.Frame(self.root)
@@ -77,6 +74,7 @@ class LinStressGUI:
         self.rebuild_rows()
 
     def rebuild_rows(self):
+        logging.info("GUI rebuilding worker rows for %s threads", self.threads_var.get())
         for child in self.rows_frame.winfo_children():
             child.destroy()
 
@@ -118,6 +116,7 @@ class LinStressGUI:
         self.stop()
         n = max(1, min(self.max_cpus, int(self.threads_var.get())))
         duration = int(self.duration_var.get())
+        logging.info("GUI start requested: threads=%s duration=%s", n, duration)
 
         activities: List[float] = []
         nic_vals: List[int] = []
@@ -141,36 +140,48 @@ class LinStressGUI:
                 except Exception:
                     nic_vals.append(0)
 
-        logging.info(f"GUI starting {n} workers duration={duration}")
+        logging.info("GUI starting %s workers duration=%s", n, duration)
 
         for i in range(n):
             act = activities[i]
             nic = nic_vals[i]
+            logging.info("GUI worker %s configured: activity=%s nic=%s", i + 1, act, nic)
             p = StressWorker.start_process(activity=act, duration=duration if duration and duration > 0 else None)
             self._set_priority(p.pid, nic)
             self.processes.append(p)
+            logging.info("GUI worker %s started with pid=%s", i + 1, p.pid)
 
     def stop(self):
         if not self.processes:
             return
-        logging.info("GUI stopping workers")
+        logging.info("GUI stopping %s workers", len(self.processes))
         for p in self.processes:
             try:
                 if p.is_alive():
+                    logging.info("GUI terminating worker pid=%s", p.pid)
                     p.terminate()
-            except Exception:
-                pass
+            except Exception as exc:
+                logging.warning("GUI failed to terminate worker pid=%s: %s", p.pid, exc)
 
         for p in self.processes:
             try:
                 p.join(timeout=1)
-            except Exception:
-                pass
+            except Exception as exc:
+                logging.warning("GUI failed to join worker pid=%s: %s", p.pid, exc)
 
         self.processes = []
+        logging.info("GUI workers stopped")
+
+    def on_close(self):
+        logging.info("GUI window closed")
+        self.stop()
+        close_application_logging(self.logger)
+        self.root.destroy()
 
     def run(self):
         self.root.mainloop()
+        self.stop()
+        close_application_logging(self.logger)
 
 
 if __name__ == "__main__":
