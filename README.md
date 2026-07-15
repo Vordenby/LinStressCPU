@@ -1,139 +1,218 @@
-# LinStressCPU  
+# LinStress v1.1-stable Release Notes: Architecture, Stability and Deployment Guide
 
-## EN
-
-LinStressCPU is a Python CPU‑stress testing utility designed as an analogue of **CPUStress** for Linux. It provides both a command‑line interface (`LinStress.py`) and a simple Tkinter GUI (`LinStressGUI.py`).  
-The tool lets you create per‑thread load levels and priorities, monitor activity, and optionally run the stressers in background processes.
+The LinStress v1.1-stable release introduces comprehensive architectural refinements designed to ensure process isolation reliability, telemetry integrity, and mathematical stability under high-load conditions. The system architecture has been modularized to separate logging concerns from the primary execution logic, while core worker processes now feature enhanced exception handling to prevent thread crashes due to numerical overflow.
 
 ---
 
-## USAGE (CLI)
+## 1. Logging Architecture and Telemetry
+
+The logging subsystem has been refactored into a dedicated utility module (`logging_utils.py`). This separation of concerns ensures that log file management does not interfere with the main application loop.
+
+| Component | Responsibility | Implementation Detail |
+|-----------|----------------|----------------------|
+| `configure_application_logging()` | Initializes logger instance with directory structure | Generates timestamped filenames using ISO 8601 (`YYYY-MM-DD_HH-MM-SS`) |
+| File Handler | Persistent logging output | Writes to `<base_dir>/logs/<timestamp>.log` format |
+| Stream Handler | Console output for monitoring | Appends `[LEVEL]` prefix to all messages |
+| `latest_log.log` | Active session indicator | Maintained as symlink-like marker pointing to current run |
+| `close_application_logging()` | Cleanup and archival | Copies active log to `latest_log.log`, removes handlers, marks archive flag |
+
+### Log Directory Structure
 
 ```
-python LinStress.py -t <threads> \
-    --level LEVEL \
-    --duration <seconds|0> \
-    -p PRIORITY \
-    [--levels LEVEL,LEVEL,...] \
-    [--priorities PRIO,PRIO,...]
-```
-
-| Option | Description |
-|--------|-------------|
-| `-t`, `--threads` | Number of workers (1‑64 or `all`). Default = CPU count. |
-| `-l`, `--level`   | Default activity level: `Low` = 0.25, `Medium` = 0.5, `Busy` = 0.75, `Maximum` = 1.0. |
-| `--duration`      | Test length in seconds (0 = infinite). |
-| `-p`, `--priority| PRIORITY` | Default process priority: `Normal` (0), `High` (-5), `Realtime` (-20). |
-| `--levels`        | Comma‑separated levels or floats for each thread. |
-| `--priorities`    | Comma‑separated priorities (names or nice values) for each thread. |
-
-*Examples*  
-
-```bash
-# 4 threads, individual levels & priorities, run 60 s:
-python LinStress.py -t 4 --levels Low,Medium,0.9,Maximum \
-    --priorities Normal,High,-10,Realtime -d 60
-
-# Quick test with two threads:
-python LinStress.py -t 2 --levels 0.5,0.2 --priorities 0,0 -d 5
+<application_dir>/
+├── logs/
+│   ├── latest_log.log          # Current active session
+│   └── YYYY-MM-DD_HH-MM-SS.log  # Archived runs
 ```
 
 ---
 
-## GUI USAGE  
+## 2. Worker Configuration Parameters
 
-```bash
-python LinStressGUI.py
-```
+The stress worker accepts multiple input configurations through both CLI and GUI interfaces.
 
-The GUI shows:
+| Parameter | Type | Default | Range/Values | Description |
+|-----------|------|---------|---------------|-------------|
+| `threads` | int/string | CPU count | 1–64 or "all" | Number of parallel workers to spawn |
+| `level` | string/float | Maximum | Low (0.25), Medium (0.5), Busy (0.75), Maximum (1.0) | CPU load percentage per thread |
+| `duration` | int | 0 (infinite) | ≥0 seconds | Runtime limit; 0 = continuous execution |
+| `priority` | string/int | Normal | Realtime (-20), High (-5), Normal (0) | Process nice level |
 
-- **Threads** (max = system CPU count) – spinbox with a “+”/“-” button.  
-- **Duration** – integer seconds (0 = infinite).  
-- **Default Level / Priority** – drop‑downs that feed the same values as CLI.  
+### Priority Level Mapping
 
-For each thread you can also edit its own level and priority before starting.
+| Name | Nice Value | Privilege Required | Use Case |
+|------|------------|--------------------|----------|
+| Realtime | -20 | Root/Administrator | Maximum CPU access, system monitoring |
+| High | -5 | Normal user | Background high-priority tasks |
+| Normal | 0 | Normal user | Standard application workload |
+
+### Load Level Mapping
+
+| Name | Coefficient | Behavior |
+|------|-------------|----------|
+| Low | 0.25 | 25% busy, 75% idle |
+| Medium | 0.50 | 50% busy, 50% idle |
+| Busy | 0.75 | 75% busy, 25% idle |
+| Maximum | 1.00 | Continuous busy loop |
 
 ---
 
-## NOTES & QUESTIONS  
+## 3. Installation and Deployment
 
-| Topic | Details |
-|-------|----------|
-| **Dependencies** | Python 3.6+. Optional: `psutil` (only for niceness). The program works without it, using the lower‑level `os.setpriority`. |
-| **Platform support** | Linux & macOS – both `psutil` and `os.setpriority` are available. <br>Windows – only `psutil` can set process priority; otherwise the tool falls back to no priority change (default). |
-| **Thread limit** | Maximum is `max(1, cpu_count())`. You may request more threads but they will share CPU resources. |
-| **Logging** | Files are written to `<project>/logs/YYYY‑MM‑DD_HH‑MM‑SS.log` plus a symbolic link `latest_log.log`. Each run creates a new timestamped file; archived logs stay in the directory. |
-| **Process termination** | On Linux/macOS: `p.terminate()` → `os.setpriority(..., -20)` (Realtime) or normal nice value on exit. <br>Windows: priority is handled solely by `psutil`. |
-| **PyInstaller** | The CLI script is marked as “suitable for PyInstaller”. To bundle logs, add `--add-data logs/;logs` to the spec file. |
+### Recommended: Automated Installer Script (`install.sh`)
+
+The `install.sh` script provides a fully automated deployment solution designed for Linux distributions with package managers. This approach minimizes manual intervention and ensures correct system integration.
+
+#### Prerequisites
+
+| Requirement | Verification Command |
+|-------------|---------------------|
+| Root access | `sudo -l` or `su` to root user |
+| Supported OS | Debian/Ubuntu, Fedora/RHEL, CentOS, Arch Linux |
+| Bash 4+ | `bash --version` |
+| Git (optional) | `git --version` |
+| Python 3.6+ | `python3 --version` |
+
+#### Installation Steps
+
+1. **Obtain the script**
+   ```bash
+   sudo curl -o /tmp/install.sh https://raw.githubusercontent.com/Vordenby/LinStressCPU/master/install.sh
+   sudo chmod +x /tmp/install.sh
+   ```
+
+2. **Execute installation**
+   ```bash
+   sudo /tmp/install.sh
+   ```
+
+#### Script Capabilities
+
+| Feature | Description |
+|---------|-------------|
+| Dependency detection | Checks existing packages before installation |
+| OS-specific package managers | Supports apt-get (Debian/Ubuntu), yum/dnf (RHEL/CentOS), pacman (Arch) |
+| Source extraction | Clones repository to temporary directory with depth 1 |
+| System paths creation | `/opt/LinStressCPU/src/` for application binaries |
+| CLI wrapper installation | `/usr/local/bin/linstresscpu` symlink to Python script |
+| GUI wrapper installation | `/usr/local/bin/linstresscpu-gui` with environment variables |
+| Desktop entry generation | Creates `.desktop` file at user's Desktop directory |
+
+#### Script Safety Features
+
+```bash
+set -euo pipefail  # Exit on error, undefined variable, pipe failure
+check_root()       # Enforces root execution requirement
+trap 'rm -rf "$TMP_DIR"' EXIT  # Cleans temporary directory on exit
+```
+
+| Failure Condition | Action Taken |
+|-------------------|---------------|
+| Non-root execution | Script exits with error message |
+| Unsupported OS | Falls back to source code manual installation recommendation |
+| Missing dependencies | Installs required packages automatically via system package manager |
+| Repository clone failure | Exits immediately with detailed error in log file |
+
+#### Log File Location
+
+All installation events are recorded at `/var/log/linstresscpu/linstresscpu.log` with timestamps and severity levels.
 
 ---
 
-## RU
+### Alternative: Manual Installation (Source Code Deployment)
 
-LinStressCPU — утилита на Python для тестирования загрузки CPU, спроектированная как аналог **CPUStress** для Linux. Приложение предоставляет как командную строку (`LinStress.py`), так и простую графическую оболочку на Tkinter (`LinStressGUI.py`).  
-Эту программу можно использовать для создания нагрузки по каждому потоку, мониторинга её активности и запуска в фоне.
+For environments requiring full source control or custom compilation paths.
 
----  
+| Step | Command | Purpose |
+|------|---------|---------|
+| 1. Clone repository | `git clone https://github.com/Vordenby/LinStressCPU.git /opt/LinStressCPU` | Download source code |
+| 2. Create wrapper script (CLI) | `cat > /usr/local/bin/linstresscpu <<EOF; exec python3 /opt/LinStressCPU/src/LinStress.py "$@"; EOF` | CLI launcher |
+| 3. Create wrapper script (GUI) | `cat > /usr/local/bin/linstresscpu-gui <<EOF; exec python3 /opt/LinStressCPU/src/LinStressGUI.py "$@"; EOF` | GUI launcher |
+| 4. Set executable permissions | `chmod +x /usr/local/bin/linstresscpu*` | Make wrappers accessible |
+| 5. Create desktop entry (optional) | See section below | Desktop menu integration |
 
-## Использование (CLI)  
+---
 
-```bash
-python LinStress.py -t <threads> \
-    --level LEVEL \
-    --duration <секунд|0> \
-    -p PRIORITY \
-    [--levels LEVEL,LEVEL,...] \
-    [--priorities PRIO,PRIO,...]
+## 4. System Integration Components
+
+### Installation Directory Structure
+
+```
+/opt/LinStressCPU/src/
+├── LinStress.py          # CLI application
+├── LinStressGUI.py       # GUI application
+└── stress.py             # Core worker module
+
+/usr/local/bin/
+├── linstresscpu          # CLI wrapper (symlink)
+└── linstresscpu-gui      # GUI wrapper (symlink)
+
+/etc/linstresscpu/        # Configuration directory
+└── linstresscpu.conf     # Future configuration file
+
+/var/log/linstresscpu/    # Log storage directory
+├── linstresscpu.log      # Main log file
+└── YYYY-MM-DD_*.log      # Archived logs by timestamp
 ```
 
-| Параметр | Описание |
-|----------|----------|
-| `-t`, `--threads` | Количество рабочих потоков (1 – 64 или `all`). По умолчанию — количество ядер CPU. |
-| `-l`, `--level`   | Уровень загрузки по умолчанию: `Low` = 0.25, `Medium` = 0.5, `Busy` = 0.75, `Maximum` = 1.0. |
-| `--duration`      | Длительность теста в секундах (0 — бесконечно). |
-| `-p`, `--priority| PRIORITY` | Приоритет процесса: `Normal` (0), `High` (-5), `Realtime` (-20). |
-| `--levels`        | Перечисление уровней или чисел от 0.0 до 1.0 для каждого потока, разделённых запятыми. |
-| `--priorities`    | Перечисление приоритетов (имён или nice‑значений) для каждого потока, разделённых запятыми. |
+### Desktop Integration
 
-*Примеры*  
+The installer creates a desktop entry for the GUI application. The location depends on execution context:
 
-```bash
-# 4 потока, индивидуальные уровни и приоритеты, работа 60 сек:
-python LinStress.py -t 4 --levels Low,Medium,0.9,Maximum \
-    --priorities Normal,High,-10,Realtime -d 60
+| Execution Context | Desktop Entry Location |
+|-------------------|------------------------|
+| Direct root execution | `/root/Desktop/LinStressCPU.desktop` |
+| Sudo from other user | `${SUDO_USER}'s_home/`/Desktop/LinStressCPU.desktop` |
+| Manual installation (non-root) | User's `~/.local/share/applications/` directory |
 
-# Быстрый тест с двумя потоками:
-python LinStress.py -t 2 --levels 0.5,0.2 --priorities 0,0 -d 5
+### Desktop Entry Configuration
+
+```ini
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=LinStress CPU Stress Test
+Comment=Vordenby's CPU Stress Test Tool
+Exec=/usr/local/bin/linstresscpu-gui %i
+Path=/opt/LinStressCPU/src
+Terminal=false
+Categories=Utility;System;
+StartupNotify=true
+TryExec=/usr/local/bin/linstresscpu-gui
 ```
 
----  
+---
 
-## Использование графической версии  
+## 5. Verification and Post-Installation Checklist
 
-```bash
-python LinStressGUI.py
-```
+| Check | Command | Expected Result |
+|-------|---------|-----------------|
+| CLI availability | `which linstresscpu` | `/usr/local/bin/linstresscpu` |
+| GUI wrapper available | `which linstresscpu-gui` | `/usr/local/bin/linstresscpu-gui` |
+| Source files present | `ls /opt/LinStressCPU/src/` | `LinStress.py`, `LinStressGUI.py`, `stress.py` |
+| Logs directory writable | `touch /var/log/linstresscpu/test.log` | Exit code 0 |
+| Python3 availability | `python3 --version` | 3.6 or higher |
 
-Графический интерфейс показывает:  
+---
 
-- **Количество потоков** (максимум — кол‑во ядер CPU) – spin‑box с кнопками “+”/“‑”.  
-- **Длительность** – целое число секунд (0 = бесконечно).  
-- **Уровень / Приоритет по умолчанию** – выпадающие списки, отдающих те же значения, что и в CLI.  
+## 6. Uninstallation
 
-Для каждого потока можно редактировать отдельный уровень и приоритет перед запуском.
+| Method | Command | Effect |
+|--------|---------|--------|
+| Remove wrapper scripts | `sudo rm /usr/local/bin/linstresscpu*` | Removes CLI and GUI wrappers |
+| Remove application directory | `sudo rm -rf /opt/LinStressCPU` | Removes source files |
+| Clear logs | `sudo rm -rf /var/log/linstresscpu/*` | Removes log files |
+| Remove desktop entry | Manual deletion from Desktop folder | Removes menu shortcut |
 
----  
+---
 
-## Замечания & Вопросы  
+## 7. Deployment Constraints and Recommendations
 
-| Тема | Подробности |
-|------|-------------|
-| **Зависимости** | Python 3.6+. Опционально: `psutil` (только для изменения nice‑значения). Программа работает без него, используя низкоуровневый `os.setpriority`. |
-| **Поддержка платформ** | Linux & macOS – обе функции `psutil` и `os.setpriority` доступны. <br>Windows — только `psutil` может задавать приоритет процесса; иначе приоритет не меняется (по умолчанию). |
-| **Ограничение потоков** | Максимум — `max(1, cpu_count())`. Если запросить больше, они будут делить CPU‑ресурсы. |
-| **Логирование** | Файлы находятся в `<проект>/logs/YYYY-MM-DD_HH-MM-SS.log`, плюс ссылка `latest_log.log`. Каждый запуск создаёт новый временный файл; старые логи сохраняются в папке. |
-| **Завершение работы** | На Linux/macOS: сначала `p.terminate()`, затем `os.setpriority(..., -20)` (Realtime) или нормальный nice‑значение при завершении. <br>Windows — приоритет задаётся исключительно `psutil`. |
-| **PyInstaller** | Скрипт CLI помечен как “подходящий для PyInstaller”. Чтобы включить логи, добавьте `--add-data logs/;logs` в spec‑файл. |
+| Constraint | Status | Recommendation |
+|------------|--------|----------------|
+| Root privileges required for install | Required | Use `sudo` or run as root |
+| Python virtual environment compatibility | Not tested | Use system Python or create venv before install |
+| Log file permissions | Owner must be root | Verify write permissions on `/var/log/linstresscpu/` |
+| GUI display server (X11/Wayland) | Required for LinStressGUI.py | Ensure `$DISPLAY` is set |
 
----  
+---
