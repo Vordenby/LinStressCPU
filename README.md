@@ -5,13 +5,6 @@
 LinStressCPU is a Python CPU‑stress testing utility designed as an analogue of **CPUStress** for Linux. It provides both a command‑line interface (`LinStress.py`) and a simple Tkinter GUI (`LinStressGUI.py`).  
 The tool lets you create per‑thread load levels and priorities, monitor activity, and optionally run the stressers in background processes.
 
-### Features  
-
-- **CLI** – configure number of threads, duration, default level/priority, and individual per‑thread settings.  
-- **Per‑thread load & priority** – each thread can have its own activity (0 → 1) and nice value (`Normal`, `High`, `Realtime`).  
-- **Tkinter GUI** – step‑by‑step configuration of threads, duration, default level/priority and live start/stop.  
-- **Logging** – detailed log files stored under a `logs/` directory (including “latest_log.log” and archived timestamped logs).  
-
 ---
 
 ## USAGE (CLI)
@@ -80,13 +73,6 @@ For each thread you can also edit its own level and priority before starting.
 
 LinStressCPU — утилита на Python для тестирования загрузки CPU, спроектированная как аналог **CPUStress** для Linux. Приложение предоставляет как командную строку (`LinStress.py`), так и простую графическую оболочку на Tkinter (`LinStressGUI.py`).  
 Эту программу можно использовать для создания нагрузки по каждому потоку, мониторинга её активности и запуска в фоне.
-
-### Особенности  
-
-- **Командная строка (CLI)** – настраивается количество потоков, длительность, уровень/приоритет по умолчанию, а также индивидуальные настройки для каждого потока.  
-- **Нагрузка и приоритеты по потоку** – каждый поток может иметь свой уровень активности (0 → 1) и nice‑значение (`Normal`, `High`, `Realtime`).  
-- **Графическая оболочка на Tkinter** – пошаговое задание параметров: количество потоков, длительность, уровень/приоритет по умолчанию, а также возможность изменять их в реальном времени.  
-- **Логирование** – подробные файлы‑логи находятся в папке `logs/` (включая `latest_log.log` и архивированные временно‑названные логи).  
 
 ---  
 
