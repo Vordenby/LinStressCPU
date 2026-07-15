@@ -76,10 +76,8 @@ def close_application_logging(logger: logging.Logger) -> Optional[Path]:
     if latest_path and run_log_path and Path(run_log_path).exists():
         shutil.copyfile(run_log_path, latest_path)
 
-    Path(latest_path).touch(exist_ok=True) if latest_path else None
-
     logger._linstress_archived = True
-    return None
+    return run_log_path
 
 
 def _self_test() -> None:

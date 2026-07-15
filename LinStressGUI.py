@@ -54,7 +54,7 @@ class LinStressGUI:
         ttk.OptionMenu(controls, self.default_level, self.default_level.get(), *LEVEL_MAP.keys()).grid(row=1, column=1, sticky=tk.W)
 
         ttk.Label(controls, text="Default Priority:").grid(row=1, column=2, sticky=tk.W, padx=(10, 0))
-        self.default_prio = tk.StringVar(value="Normal")
+        self.default_prio = tk.StringVar(value="Normal (0)")
         ttk.OptionMenu(controls, self.default_prio, self.default_prio.get(), *PRIORITY_MAP.keys()).grid(row=1, column=3, sticky=tk.W)
 
         btn_frame = ttk.Frame(self.root)
