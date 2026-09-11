@@ -1,0 +1,5 @@
+# CLI arguments. Arguments may be grouped on one line or written separately.
+-t 2
+-l Medium
+-d 60
+-p Normal
