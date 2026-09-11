@@ -280,28 +280,88 @@ exec python3 "$INSTALL_DIR/src/LinStressGUI.py" "\$@"
 EOF
 chmod +x /usr/local/bin/linstresscpu-gui
 
-DESKTOP_DIR="/root/Desktop"
-if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
-    if id "$SUDO_USER" >/dev/null 2>&1; then
-        HOME_DIR="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
-        DESKTOP_DIR="${HOME_DIR}/Desktop"
-    fi
+TARGET_USER="${SUDO_USER:-root}"
+if ! id "$TARGET_USER" >/dev/null 2>&1; then
+    log_message "ERROR" "Target user does not exist: $TARGET_USER"
+    exit 1
 fi
 
-mkdir -p "$DESKTOP_DIR"
-cat > "$DESKTOP_DIR/LinStressCPU.desktop" <<EOF
+HOME_DIR="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
+if [[ -z "$HOME_DIR" ]]; then
+    log_message "ERROR" "Could not determine the home directory for $TARGET_USER"
+    exit 1
+fi
+
+TARGET_GROUP="$(id -gn "$TARGET_USER")"
+DESKTOP_DIR="$HOME_DIR/Desktop"
+APPLICATIONS_DIR="$HOME_DIR/.local/share/applications"
+
+write_desktop_entry() {
+    local entry_path="$1"
+    local name="$2"
+    local comment="$3"
+    local executable="$4"
+    local terminal="$5"
+
+    mkdir -p "$(dirname "$entry_path")"
+    cat > "$entry_path" <<EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=LinStressCPU
-Comment=Vordenby's CPU Stress Test Tool with Tkinter support
-Exec=/usr/local/bin/linstresscpu-gui %U
+Name=$name
+Comment=$comment
+Exec=$executable
 Path=$INSTALL_DIR/src
-Terminal=false
+Terminal=$terminal
 Categories=Utility;System;
 StartupNotify=true
-TryExec=/usr/local/bin/linstresscpu-gui
+TryExec=$executable
 EOF
-chmod +644 "$DESKTOP_DIR/LinStressCPU.desktop"
+    chmod 755 "$entry_path"
+    chown "$TARGET_USER:$TARGET_GROUP" "$entry_path"
+}
+
+validate_desktop_entry() {
+    local entry_path="$1"
+    local expected_name="$2"
+    local expected_exec="$3"
+
+    [[ -s "$entry_path" ]] || return 1
+    grep -Fxq "Type=Application" "$entry_path" || return 1
+    grep -Fxq "Name=$expected_name" "$entry_path" || return 1
+    grep -Fxq "Exec=$expected_exec" "$entry_path" || return 1
+    grep -Fxq "TryExec=$expected_exec" "$entry_path" || return 1
+    [[ -x "$expected_exec" ]] || return 1
+}
+
+GUI_ENTRY_NAME="LinStressCPU"
+CLI_ENTRY_NAME="LinStressCPU CLI"
+GUI_EXECUTABLE="/usr/local/bin/linstresscpu-gui"
+CLI_EXECUTABLE="/usr/local/bin/linstresscpu"
+
+for entry_dir in "$APPLICATIONS_DIR" "$DESKTOP_DIR"; do
+    write_desktop_entry "$entry_dir/LinStressCPU.desktop" "$GUI_ENTRY_NAME" "LinStressCPU graphical interface" "$GUI_EXECUTABLE" false
+    write_desktop_entry "$entry_dir/LinStressCPU-CLI.desktop" "$CLI_ENTRY_NAME" "LinStressCPU command-line interface" "$CLI_EXECUTABLE" true
+done
+
+for entry_path in \
+    "$APPLICATIONS_DIR/LinStressCPU.desktop" \
+    "$APPLICATIONS_DIR/LinStressCPU-CLI.desktop" \
+    "$DESKTOP_DIR/LinStressCPU.desktop" \
+    "$DESKTOP_DIR/LinStressCPU-CLI.desktop"; do
+    if [[ "$entry_path" == *-CLI.desktop ]]; then
+        expected_name="$CLI_ENTRY_NAME"
+        expected_executable="$CLI_EXECUTABLE"
+    else
+        expected_name="$GUI_ENTRY_NAME"
+        expected_executable="$GUI_EXECUTABLE"
+    fi
+    if ! validate_desktop_entry "$entry_path" "$expected_name" "$expected_executable"; then
+        log_message "ERROR" "Desktop entry validation failed: $entry_path"
+        exit 1
+    fi
+done
+
+log_message "INFO" "Created and validated CLI and GUI desktop entries for $TARGET_USER."
 
 trap 'rm -rf "$TMP_DIR"' EXIT
