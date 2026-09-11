@@ -17,9 +17,13 @@ def _build_run_log_path(logs_dir: Path, timestamp: str) -> Path:
 
 
 def configure_application_logging(app_name: str = "linstress", base_dir: Optional[str] = None, level: int = logging.INFO):
-    base_path = Path(base_dir or os.path.dirname(os.path.abspath(__file__)))
-    logs_dir = base_path / "logs"
-    logs_dir.mkdir(exist_ok=True)
+    configured_logs_dir = os.environ.get("LINSTRESS_LOG_DIR")
+    if configured_logs_dir:
+        logs_dir = Path(configured_logs_dir).expanduser()
+    else:
+        base_path = Path(base_dir or os.path.dirname(os.path.abspath(__file__)))
+        logs_dir = base_path / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
 
     latest_path = logs_dir / "latest_log.log"
     run_timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
