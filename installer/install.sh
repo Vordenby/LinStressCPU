@@ -24,16 +24,16 @@ log_message() {
     fi
 }
 
-log_message "INFO" "Создана временная директория: $TMP_DIR"
+log_message "INFO" "Created temporary directory: $TMP_DIR"
 
 cd "$TMP_DIR" || exit 1
 
 check_root() {
     if [ "$EUID" -eq 0 ]; then
-        log_message "INFO" "Запуск как root."
+        log_message "INFO" "Running as root."
     else
-        log_message "ERROR" "Скрипт должен запускаться от root."
-        echo -e "${RED}Скрипт должен запускаться от root.${NC}"
+        log_message "ERROR" "The script must be run as root."
+        echo -e "${RED}The script must be run as root.${NC}"
         sleep 3
         exit 1
     fi
@@ -42,141 +42,209 @@ check_root() {
 detect_os() {
     if [[ -f /etc/os-release ]]; then
         . /etc/os-release
+        PMGR=""
+
+        if command -v apt-get >/dev/null 2>&1 && [ -d /etc/apt ]; then
+            PMGR="apt"
+            log_message "INFO" "Detected a Debian-like system (apt)."
+            return 0
+        fi
+
+        if [ -f /etc/dnf.conf ]; then
+            PMGR="dnf"
+            log_message "INFO" "Detected a dnf-based system (Fedora, RHEL, or CentOS)."
+            return 0
+        fi
+
+        if [ -f /etc/pacman.conf ]; then
+            PMGR="pacman"
+            log_message "INFO" "Detected a pacman-based system (Arch or Manjaro)."
+            return 0
+        fi
+
+        if [ -f /etc/zypper.conf ]; then
+            PMGR="zypper"
+            log_message "INFO" "Detected a zypper-based system (openSUSE or SUSE)."
+            return 0
+        fi
+
         case "$ID" in
-            ubuntu|debian) PMGR="apt_get" ;; 
-            fedora)       PMGR="dnf" ;;
-            centos|rhel)  PMGR="yum" ;;
-            arch)         PMGR="pacman" ;;
-            *) 
-                log_message "ERROR" "Неподдерживаемая ОС: $ID"
-                echo -e "${RED}Неподдерживаемая ОС: $ID${NC}. Попробуйте использовать исходники напрямую."
-                sleep 3
-                exit 1
+            ubuntu|debian|kali|raspbian|ubuntu-kylin|astra|astra-linux)
+                PMGR="apt"
+                ;;
+            fedora|centos|rhel|redhat|amazon)
+                PMGR="dnf"
+                ;;
+            arch|manjaro)
+                PMGR="pacman"
+                ;;
+            openSUSE|suse)
+                PMGR="zypper"
+                ;;
         esac
-        log_message "INFO" "Определена ОС: $ID, менеджер пакетов: $PMGR"
+
+        if [[ "$PMGR" != "apt" && "$PMGR" != "dnf" && "$PMGR" != "pacman" && "$PMGR" != "zypper" ]]; then
+            echo -e "${GREEN}Could not detect the distribution automatically.${NC}"
+            echo "Please select your distribution:"
+            echo "1) Debian-like (Ubuntu, Debian, Kali, Astra Linux)"
+            echo "2) RHEL/CentOS/Fedora"
+            echo "3) Arch/Manjaro"
+            echo "4) openSUSE/SUSE"
+
+            read -p "Select your distribution (1-4): " choice
+
+            case "$choice" in
+                1)
+                    PMGR="apt"
+                    ;;
+                2)
+                    PMGR="dnf"
+                    ;;
+                3)
+                    PMGR="pacman"
+                    ;;
+                4)
+                    PMGR="zypper"
+                    ;;
+                *)
+                    log_message "ERROR" "Invalid distribution selection."
+                    echo -e "${RED}Invalid selection.${NC}"
+                    sleep 3
+                    exit 1
+                    ;;
+            esac
+
+            log_message "INFO" "User selected package manager: $PMGR"
+        fi
     else
-        log_message "ERROR" "Не найдена /etc/os-release"
-        echo -e "${RED}Не найдена /etc/os-release.${NC}. Попробуйте использовать исходники напрямую."
+        log_message "ERROR" "/etc/os-release was not found."
+        echo -e "${RED}/etc/os-release was not found.${NC} Try installing from source instead."
         sleep 3
         exit 1
     fi
 }
 
 install_deps() {
-    log_message "INFO" "Устанавливаются зависимости."
+    local -a deps=()
 
     case "$PMGR" in
-        apt_get)
-            DEPS=(git python3 python3-pip python3-venv python3-tk)
-            for pkg in "${DEPS[@]}"; do
-                if ! dpkg -s "$pkg" >/dev/null 2>&1; then
-                    log_message "INFO" "Устанавливаю $pkg..."
-                    apt-get install -y "$pkg"
-                else
-                    log_message "INFO" "$pkg уже установлен."
-                fi
-            done
+        apt)
+            deps=(python3 python3-pip python3-venv)
             ;;
-
-        yum)
-            DEPS=(git python3 python3-pip python3-virtualenv python3-tkinter)
-            for pkg in "${DEPS[@]}"; do
-                if ! rpm -q "$pkg" >/dev/null 2>&1; then
-                    log_message "INFO" "Устанавливаю $pkg..."
-                    yum install -y "$pkg"
-                else
-                    log_message "INFO" "$pkg уже установлен."
-                fi
-            done
+        dnf|yum)
+            deps=(python3 python3-pip python3-virtualenv python3-tkinter)
             ;;
-        dnf)
-            DEPS=(git python3 python3-pip python3-virtualenv python3-tkinter)
-            for pkg in "${DEPS[@]}"; do
-                if ! dnf query "$pkg" >/dev/null 2>&1; then
-                    log_message "INFO" "Устанавливаю $pkg..."
-                    dnf install -y "$pkg"
-                else
-                    log_message "INFO" "$pkg уже установлен."
-                fi
-            done
-            ;;
-
         pacman)
-            DEPS=(git python python-pip python-virtualenv tk)
-            for pkg in "${DEPS[@]}"; do
-                if ! pacman -Qi "$pkg" >/dev/null 2>&1; then
-                    log_message "INFO" "Устанавливаю $pkg..."
-                    pacman -S --noconfirm "$pkg"
-                else
-                    log_message "INFO" "$pkg уже установлен."
+            deps=(python3 python3-pip python3-virtualenv python3-tk)
+            ;;
+        zypper)
+            deps=(python3 python3-pip python3-venv python3-tk)
+            ;;
+    esac
+
+    if [[ "$PMGR" == "apt" ]]; then
+        log_message "INFO" "Refreshing apt package metadata."
+        local -a apt_source_files=(/etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources)
+        local source_file
+        local has_active_sources=0
+        local has_commented_sources=0
+
+        for source_file in "${apt_source_files[@]}"; do
+            [[ -f "$source_file" ]] || continue
+            if grep -Eq '^[[:space:]]*deb([[:space:]]|\[)' "$source_file" || \
+                { [[ "$source_file" == *.sources ]] && grep -Eq '^[[:space:]]*Types:[[:space:]].*deb' "$source_file"; }; then
+                has_active_sources=1
+            fi
+            if [[ "$source_file" == *.list ]] && grep -Eq '^[[:space:]]*#[[:space:]]*deb([[:space:]]|\[)' "$source_file"; then
+                has_commented_sources=1
+            fi
+        done
+
+        if [[ "$has_active_sources" -eq 0 && "$has_commented_sources" -eq 1 ]]; then
+            local source_backup_dir="/var/backups/linstresscpu/apt-sources-$(date +%Y%m%d%H%M%S)"
+            mkdir -p "$source_backup_dir"
+            log_message "INFO" "No active apt sources found. Backing up and enabling commented deb entries."
+
+            for source_file in "${apt_source_files[@]}"; do
+                [[ -f "$source_file" ]] || continue
+                if grep -Eq '^[[:space:]]*#[[:space:]]*deb([[:space:]]|\[)' "$source_file"; then
+                    cp -p "$source_file" "$source_backup_dir/"
+                    sed -i -E 's/^([[:space:]]*)#[[:space:]]*(deb([[:space:]]|\[).*)$/\1\2/' "$source_file"
                 fi
             done
-            ;;
-
-        *)
-            log_message "ERROR" "Неподдерживаемый менеджер пакетов: $PMGR"
-            echo -e "${RED}Неподдерживаемый менеджер пакетов: $PMGR${NC}. Попробуйте использовать исходники напрямую."
-            sleep 3
-            exit 1
-            ;;
-    esac
-}
-
-resolve_source_file() {
-    local target_name="$1"
-    local candidates=("$target_name")
-
-    case "$target_name" in
-        LinStress.py)      candidates=(LinStress.py linstress.py);;
-        LinStressGUI.py)   candidates=(LinStressGUI.py linstressgui.py);;
-        stress.py)         candidates=(stress.py Stress.py);;
-    esac
-
-    local candidate
-    for candidate in "${candidates[@]}"; do
-        if [ -f "./$candidate" ]; then
-            echo "$candidate"
-            return 0
         fi
-    done
-    return 1
-}
 
-check_root() {
-    if [ "$EUID" -eq 0 ]; then
-        log_message "INFO" "Запуск как root."
-    else
-        log_message "ERROR" "Скрипт должен запускаться от root."
-        echo -e "${RED}Скрипт должен запускаться от root.${NC}"
-        sleep 3
-        exit 1
-    fi
-}
+        if [[ "$has_active_sources" -eq 0 && "$has_commented_sources" -eq 0 ]]; then
+            log_message "ERROR" "No apt sources were found. Add the official Astra Linux repository to /etc/apt/sources.list or /etc/apt/sources.list.d, then run the installer again."
+            echo -e "${RED}No apt sources were found.${NC} Add the official Astra Linux repository to /etc/apt/sources.list or /etc/apt/sources.list.d, then run the installer again."
+            exit 1
+        fi
 
-detect_os() {
-    if [[ -f /etc/os-release ]]; then
-        . /etc/os-release
-        case "$ID" in
-            ubuntu|debian) PMGR="apt_get" ;; 
-            fedora)       PMGR="dnf" ;;
-            centos|rhel)  PMGR="yum" ;;
-            arch)         PMGR="pacman" ;;
-            *) 
-                log_message "ERROR" "Неподдерживаемая ОС: $ID"
-                echo -e "${RED}Неподдерживаемая ОС: $ID${NC}. Попробуйте использовать исходники напрямую."
-                sleep 3
+        if ! apt-get -o Acquire::Retries=3 update; then
+            log_message "WARNING" "apt update failed. Removing incomplete package indexes and retrying."
+            rm -rf /var/lib/apt/lists/partial
+            if ! apt-get -o Acquire::Retries=3 update; then
+                log_message "ERROR" "apt package metadata could not be refreshed. Check repository URLs, signing keys, and network access."
+                echo -e "${RED}Could not refresh apt package metadata.${NC} Check repository URLs, signing keys, and network access."
                 exit 1
+            fi
+        fi
+
+        local tkinter_pkg=""
+        local candidate
+        for candidate in python3-tk python3-tkinter; do
+            if apt-cache show "$candidate" >/dev/null 2>&1; then
+                tkinter_pkg="$candidate"
+                break
+            fi
+        done
+
+        if [[ -z "$tkinter_pkg" ]]; then
+            log_message "ERROR" "No Tkinter package is available in the configured apt repositories. Tkinter cannot be installed with pip; enable the Astra Linux repository that contains python3-tk or python3-tkinter."
+            echo -e "${RED}No Tkinter package is available in the configured apt repositories.${NC}"
+            echo "Enable an Astra Linux repository containing python3-tk or python3-tkinter, then run the installer again."
+            exit 1
+        fi
+
+        deps+=("$tkinter_pkg")
+        log_message "INFO" "Using Tkinter package: $tkinter_pkg"
+    fi
+
+    for pkg in "${deps[@]}"; do
+        case "$PMGR" in
+            apt)
+                if ! dpkg -s "$pkg" >/dev/null 2>&1; then
+                    log_message "INFO" "Installing $pkg..."
+                    apt-get install -y --no-install-recommends "$pkg"
+                fi
+                ;;
+            yum|dnf)
+                if ! rpm -q "$pkg" >/dev/null 2>&1; then
+                    log_message "INFO" "Installing $pkg..."
+                    yum install -y --skip-broken "$pkg"
+                fi
+                ;;
+            pacman)
+                if ! pacman -Qi "$pkg" >/dev/null 2>&1; then
+                    log_message "INFO" "Installing $pkg..."
+                    pacman -S --noconfirm "$pkg"
+                fi
+                ;;
+            zypper)
+                if ! zypper se -x "$pkg" >/dev/null 2>&1; then
+                    log_message "INFO" "Installing $pkg..."
+                    zypper install -y --no-confirm "$pkg"
+                fi
+                ;;
         esac
-        log_message "INFO" "Определена ОС: $ID, менеджер пакетов: $PMGR"
-    else
-        log_message "ERROR" "Не найдена /etc/os-release"
-        echo -e "${RED}Не найдена /etc/os-release.${NC}. Попробуйте использовать исходники напрямую."
-        sleep 3
+    done
+
+    if ! python3 -c 'import tkinter' >/dev/null 2>&1; then
+        log_message "ERROR" "Python Tkinter is still unavailable after dependency installation."
+        echo -e "${RED}Python Tkinter is unavailable after dependency installation.${NC}"
         exit 1
     fi
 }
-
-log_message "INFO" "Запуск основной установки."
 
 check_root || exit 1
 detect_os || exit 1
@@ -187,12 +255,9 @@ touch /etc/linstresscpu/linstresscpu.conf
 INSTALL_DIR="/opt/LinStressCPU"
 
 if ! git clone --depth 1 "$REPO_URL" .; then
-    log_message "ERROR" "Не удалось клонировать $REPO_URL"
-    echo
+    log_message "ERROR" "Failed to clone $REPO_URL"
     exit 1
 fi
-
-log_message "INFO" "Клонирование завершено."
 
 mkdir -p "$INSTALL_DIR/src"
 cp ./LinStress.py           "$INSTALL_DIR/src/"
@@ -200,23 +265,19 @@ cp ./LinStressGUI.py        "$INSTALL_DIR/src/"
 cp ./stress.py              "$INSTALL_DIR/src/"
 cp ./logging_utils.py       "$INSTALL_DIR/src/"
 
-if ! install_deps; then
-    log_message "ERROR" "Ошибка при установке зависимостей."
-    echo
-    exit 1
-fi
+install_deps
 
-cat > /usr/local/bin/linstresscpu <<EOF2
+cat > /usr/local/bin/linstresscpu <<EOF
 #!/bin/bash
 exec python3 "$INSTALL_DIR/src/LinStress.py" "\$@"
-EOF2
+EOF
 chmod +x /usr/local/bin/linstresscpu
 
-cat > /usr/local/bin/linstresscpu-gui <<EOF3
+cat > /usr/local/bin/linstresscpu-gui <<EOF
 #!/bin/bash
 export LINSTRESS_CONFIG="/etc/linstresscpu/linstresscpu.conf"
 exec python3 "$INSTALL_DIR/src/LinStressGUI.py" "\$@"
-EOF3
+EOF
 chmod +x /usr/local/bin/linstresscpu-gui
 
 DESKTOP_DIR="/root/Desktop"
@@ -228,24 +289,19 @@ if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
 fi
 
 mkdir -p "$DESKTOP_DIR"
-cat > "$DESKTOP_DIR/LinStressCPU.desktop" <<EOF4
+cat > "$DESKTOP_DIR/LinStressCPU.desktop" <<EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
 Name=LinStressCPU
-Comment=Vordenby's CPU Stress Test Tool
-Exec=/usr/local/bin/linstresscpu-gui %i
+Comment=Vordenby's CPU Stress Test Tool with Tkinter support
+Exec=/usr/local/bin/linstresscpu-gui %U
 Path=$INSTALL_DIR/src
 Terminal=false
 Categories=Utility;System;
 StartupNotify=true
 TryExec=/usr/local/bin/linstresscpu-gui
-EOF4
-chmod +x "$DESKTOP_DIR/LinStressCPU.desktop"
-
-log_message "INFO" "Установка завершена."
+EOF
+chmod +644 "$DESKTOP_DIR/LinStressCPU.desktop"
 
 trap 'rm -rf "$TMP_DIR"' EXIT
-
-echo
-log_message "INFO" "Все временные файлы удалены."
