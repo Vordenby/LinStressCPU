@@ -260,10 +260,10 @@ if ! git clone --depth 1 "$REPO_URL" .; then
 fi
 
 mkdir -p "$INSTALL_DIR/src"
-cp ./LinStress.py           "$INSTALL_DIR/src/"
-cp ./LinStressGUI.py        "$INSTALL_DIR/src/"
-cp ./stress.py              "$INSTALL_DIR/src/"
-cp ./logging_utils.py       "$INSTALL_DIR/src/"
+cp ./src/LinStress.py       "$INSTALL_DIR/src/"
+cp ./src/LinStressGUI.py    "$INSTALL_DIR/src/"
+cp ./src/stress.py          "$INSTALL_DIR/src/"
+cp ./src/logging_utils.py   "$INSTALL_DIR/src/"
 
 install_deps
 

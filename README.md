@@ -11,7 +11,7 @@ LinStress is a command‑line and graphical tool that generates configurable CPU
 ### Automatic Installer (`install.sh`) – Recommended
 #### WORKS ON Debian/Ubuntu-like, Fedora/RHEL/CentOS (& Red Hat‑distro's), Arch  
 ```bash
-sudo curl -o /tmp/install.sh https://raw.githubusercontent.com/Vordenby/LinStressCPU/master/install.sh
+sudo curl -o /tmp/install.sh https://raw.githubusercontent.com/Vordenby/LinStressCPU/master/Other/install.sh
 sudo chmod +x /tmp/install.sh
 sudo /tmp/install.sh
 ```
@@ -50,6 +50,14 @@ linstresscpu -t 8 -l Medium --duration 300 --priority High   # start 8 threads, 
 
 ### Graphical Interface (GUI)  
 A tiny Tkinter window lets you set the same parameters: number of threads, load level, duration, and default priority for each worker row.
+
+### Local launchers
+```bash
+./run_gui.sh
+./run_cli.sh
+```
+
+The CLI launcher reads its arguments from `CLI-Args.txt`. Each line can contain one or more arguments; blank lines and lines beginning with `#` are ignored.
 
 ## Quick Start Checklist  
 
