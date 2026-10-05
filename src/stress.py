@@ -12,14 +12,14 @@ class StressWorker:
         self.cycle = 0.05
 
     def run(self):
-        end_time = time.time() + self.duration if self.duration else None
+        end_time = time.monotonic() + self.duration if self.duration else None
         x = 1.0
 
         while True:
-            t0 = time.time()
+            t0 = time.monotonic()
             busy_end = t0 + self.cycle * self.activity
 
-            while time.time() < busy_end:
+            while time.monotonic() < busy_end:
                 try:
                     x = (m.sin(x) * m.cos(x) * m.tan(x) * m.sqrt(abs(x)) * m.log(abs(x) + 1e-10) * m.exp(x)) % 1e6
                 except (ValueError, OverflowError):
@@ -29,7 +29,7 @@ class StressWorker:
             if sleep_time > 0:
                 time.sleep(sleep_time)
 
-            if end_time and time.time() >= end_time:
+            if end_time and time.monotonic() >= end_time:
                 break
 
     @staticmethod

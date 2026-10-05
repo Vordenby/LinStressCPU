@@ -31,29 +31,27 @@ def configure_application_logging(app_name: str = "linstress", base_dir: Optiona
 
     latest_path.touch(exist_ok=True)
 
-    root_logger = logging.getLogger()
-    root_logger.setLevel(level)
+    logger = logging.getLogger(app_name)
+    logger.setLevel(level)
+    logger.propagate = False
 
-    for handler in list(root_logger.handlers):
+    for handler in list(logger.handlers):
         if getattr(handler, "_linstress_handler", False):
-            root_logger.removeHandler(handler)
+            logger.removeHandler(handler)
             handler.close()
 
     file_handler = logging.FileHandler(run_log_path, encoding="utf-8")
     file_handler.setLevel(level)
     file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
     file_handler._linstress_handler = True
-    root_logger.addHandler(file_handler)
+    logger.addHandler(file_handler)
 
     stream_handler = logging.StreamHandler()
     stream_handler.setLevel(level)
     stream_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
     stream_handler._linstress_handler = True
-    root_logger.addHandler(stream_handler)
+    logger.addHandler(stream_handler)
 
-    logger = logging.getLogger(app_name)
-    logger.setLevel(level)
-    logger.propagate = True
     logger._linstress_run_timestamp = run_timestamp
     logger._linstress_run_log_path = run_log_path
     logger._linstress_latest_path = latest_path
@@ -70,10 +68,9 @@ def close_application_logging(logger: logging.Logger) -> Optional[Path]:
     latest_path = getattr(logger, "_linstress_latest_path", None)
     run_log_path = getattr(logger, "_linstress_run_log_path", None)
 
-    root_logger = logging.getLogger()
-    handlers = [handler for handler in list(root_logger.handlers) if getattr(handler, "_linstress_handler", False)]
+    handlers = [handler for handler in list(logger.handlers) if getattr(handler, "_linstress_handler", False)]
     for handler in handlers:
-        root_logger.removeHandler(handler)
+        logger.removeHandler(handler)
         handler.flush()
         handler.close()
 
