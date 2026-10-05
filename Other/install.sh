@@ -11,6 +11,7 @@ NC='\033[0;m'
 
 LOG_FILE="/var/log/linstresscpu/linstresscpu.log"
 TMP_DIR=$(mktemp -d)
+DEPENDENCY_WARNINGS=()
 
 log_message() {
     local level="$1"; shift
@@ -22,6 +23,12 @@ log_message() {
     if [[ "$level" == "ERROR" ]]; then
         echo -e "\e[31mERROR:\e[0m $message" >&2
     fi
+}
+
+warn_dependency() {
+    local message="$1"
+    DEPENDENCY_WARNINGS+=("$message")
+    log_message "WARNING" "$message"
 }
 
 log_message "INFO" "Created temporary directory: $TMP_DIR"
@@ -192,18 +199,16 @@ install_deps() {
         fi
 
         if [[ "$has_active_sources" -eq 0 && "$has_commented_sources" -eq 0 ]]; then
-            log_message "ERROR" "No apt sources were found. Add the official Astra Linux repository to /etc/apt/sources.list or /etc/apt/sources.list.d, then run the installer again."
-            echo -e "${RED}No apt sources were found.${NC} Add the official Astra Linux repository to /etc/apt/sources.list or /etc/apt/sources.list.d, then run the installer again."
-            exit 1
+            warn_dependency "No apt sources were found; dependency packages may not be installable."
         fi
 
-        if ! apt-get -o Acquire::Retries=3 update; then
-            log_message "WARNING" "apt update failed. Removing incomplete package indexes and retrying."
-            rm -rf /var/lib/apt/lists/partial
+        if [[ "$has_active_sources" -eq 1 || "$has_commented_sources" -eq 1 ]]; then
             if ! apt-get -o Acquire::Retries=3 update; then
-                log_message "ERROR" "apt package metadata could not be refreshed. Check repository URLs, signing keys, and network access."
-                echo -e "${RED}Could not refresh apt package metadata.${NC} Check repository URLs, signing keys, and network access."
-                exit 1
+                log_message "WARNING" "apt update failed. Removing incomplete package indexes and retrying."
+                rm -rf /var/lib/apt/lists/partial
+                if ! apt-get -o Acquire::Retries=3 update; then
+                    warn_dependency "apt package metadata could not be refreshed; check repository URLs, signing keys, and network access."
+                fi
             fi
         fi
 
@@ -222,26 +227,25 @@ install_deps() {
         done
 
         if [[ -z "$python_pkg" ]]; then
-            log_message "ERROR" "Python 3.11 or newer is unavailable in the configured apt repositories."
-            echo -e "${RED}Python 3.11 or newer is unavailable in the configured apt repositories.${NC}"
-            exit 1
+            warn_dependency "Python 3.11 or newer is unavailable in the configured apt repositories."
         fi
 
-        candidate="${python_pkg}-tk"
-        if apt-cache show "$candidate" >/dev/null 2>&1; then
-            tkinter_pkg="$candidate"
+        if [[ -n "$python_pkg" ]]; then
+            candidate="${python_pkg}-tk"
+            if apt-cache show "$candidate" >/dev/null 2>&1; then
+                tkinter_pkg="$candidate"
+            fi
         fi
 
         if [[ -z "$tkinter_pkg" ]]; then
-            log_message "ERROR" "No Tkinter package is available for $python_pkg in the configured apt repositories."
-            echo -e "${RED}No Tkinter package is available in the configured apt repositories.${NC}"
-            echo "Enable the Astra Linux repository containing ${python_pkg}-tk, then run the installer again."
-            exit 1
+            warn_dependency "No Tkinter package is available in the configured apt repositories."
         fi
 
-        deps=("$python_pkg" "$tkinter_pkg" xdg-utils)
-        log_message "INFO" "Using Python package: $python_pkg"
-        log_message "INFO" "Using Tkinter package: $tkinter_pkg"
+        [[ -z "$python_pkg" ]] || deps+=("$python_pkg")
+        [[ -z "$tkinter_pkg" ]] || deps+=("$tkinter_pkg")
+        deps+=(xdg-utils)
+        [[ -z "$python_pkg" ]] || log_message "INFO" "Using Python package: $python_pkg"
+        [[ -z "$tkinter_pkg" ]] || log_message "INFO" "Using Tkinter package: $tkinter_pkg"
     fi
 
     for pkg in "${deps[@]}"; do
@@ -249,42 +253,53 @@ install_deps() {
             apt)
                 if ! dpkg -s "$pkg" >/dev/null 2>&1; then
                     log_message "INFO" "Installing $pkg..."
-                    apt-get install -y --no-install-recommends "$pkg"
+                    if ! apt-get install -y --no-install-recommends "$pkg"; then
+                        warn_dependency "Could not install dependency package: $pkg."
+                    fi
                 fi
                 ;;
             yum|dnf)
                 if ! rpm -q "$pkg" >/dev/null 2>&1; then
                     log_message "INFO" "Installing $pkg..."
                     if [[ "$PMGR" == "dnf" ]]; then
-                        dnf install -y --skip-broken "$pkg"
+                        if ! dnf install -y --skip-broken "$pkg"; then
+                            warn_dependency "Could not install dependency package: $pkg."
+                        fi
                     else
-                        yum install -y --skip-broken "$pkg"
+                        if ! yum install -y --skip-broken "$pkg"; then
+                            warn_dependency "Could not install dependency package: $pkg."
+                        fi
                     fi
                 fi
                 ;;
             pacman)
                 if ! pacman -Qi "$pkg" >/dev/null 2>&1; then
                     log_message "INFO" "Installing $pkg..."
-                    pacman -S --noconfirm "$pkg"
+                    if ! pacman -S --noconfirm "$pkg"; then
+                        warn_dependency "Could not install dependency package: $pkg."
+                    fi
                 fi
                 ;;
             zypper)
                 if ! zypper se -x "$pkg" >/dev/null 2>&1; then
                     log_message "INFO" "Installing $pkg..."
-                    zypper install -y --no-confirm "$pkg"
+                    if ! zypper install -y --no-confirm "$pkg"; then
+                        warn_dependency "Could not install dependency package: $pkg."
+                    fi
                 fi
                 ;;
         esac
     done
 
     if [[ -z "${PYTHON_BIN:-}" ]]; then
-        PYTHON_BIN="$(command -v python3.14 2>/dev/null || command -v python3.13 2>/dev/null || command -v python3.12 2>/dev/null || command -v python3.11 2>/dev/null || true)"
+        PYTHON_BIN="$(command -v python3.14 2>/dev/null || command -v python3.13 2>/dev/null || command -v python3.12 2>/dev/null || command -v python3.11 2>/dev/null || command -v python3 2>/dev/null || true)"
     fi
 
     if [[ -z "$PYTHON_BIN" ]] || ! "$PYTHON_BIN" -c 'import sys, tkinter; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1; then
-        log_message "ERROR" "Python Tkinter is still unavailable after dependency installation."
-        echo -e "${RED}Python 3.11+ with Tkinter is unavailable after dependency installation.${NC}"
-        exit 1
+        warn_dependency "Python 3.11+ with Tkinter is unavailable after dependency installation."
+        if [[ -z "$PYTHON_BIN" ]] || ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+            PYTHON_BIN="$(command -v python3.14 2>/dev/null || command -v python3.13 2>/dev/null || command -v python3.12 2>/dev/null || command -v python3.11 2>/dev/null || command -v python3 2>/dev/null || printf '%s' python3)"
+        fi
     fi
 }
 
@@ -398,20 +413,29 @@ FOLDER_ENTRY_NAME="LinStressCPU folder"
 GUI_EXECUTABLE="/usr/local/bin/linstresscpu-gui"
 FOLDER_EXECUTABLE="$(command -v xdg-open || true)"
 if [[ -z "$FOLDER_EXECUTABLE" ]]; then
-    log_message "ERROR" "xdg-open is required to create the folder shortcut."
-    exit 1
+    warn_dependency "xdg-open is unavailable; folder shortcuts could not be created."
+else
+    for entry_dir in "$APPLICATIONS_DIR" "$DESKTOP_DIR"; do
+        write_desktop_entry "$entry_dir/LinStressCPU-folder.desktop" "$FOLDER_ENTRY_NAME" "LinStressCPU installation folder" "$FOLDER_EXECUTABLE $INSTALL_DIR" false "$FOLDER_EXECUTABLE"
+    done
 fi
 
 for entry_dir in "$APPLICATIONS_DIR" "$DESKTOP_DIR"; do
     write_desktop_entry "$entry_dir/LinStressCPU.desktop" "$GUI_ENTRY_NAME" "LinStressCPU graphical interface" "$GUI_EXECUTABLE" false "$GUI_EXECUTABLE"
-    write_desktop_entry "$entry_dir/LinStressCPU-folder.desktop" "$FOLDER_ENTRY_NAME" "LinStressCPU installation folder" "$FOLDER_EXECUTABLE $INSTALL_DIR" false "$FOLDER_EXECUTABLE"
 done
 
-for entry_path in \
-    "$APPLICATIONS_DIR/LinStressCPU.desktop" \
-    "$APPLICATIONS_DIR/LinStressCPU-folder.desktop" \
-    "$DESKTOP_DIR/LinStressCPU.desktop" \
-    "$DESKTOP_DIR/LinStressCPU-folder.desktop"; do
+desktop_entries=(
+    "$APPLICATIONS_DIR/LinStressCPU.desktop"
+    "$DESKTOP_DIR/LinStressCPU.desktop"
+)
+if [[ -n "$FOLDER_EXECUTABLE" ]]; then
+    desktop_entries+=(
+        "$APPLICATIONS_DIR/LinStressCPU-folder.desktop"
+        "$DESKTOP_DIR/LinStressCPU-folder.desktop"
+    )
+fi
+
+for entry_path in "${desktop_entries[@]}"; do
     if [[ "$entry_path" == *-folder.desktop ]]; then
         expected_name="$FOLDER_ENTRY_NAME"
         expected_exec="$FOLDER_EXECUTABLE $INSTALL_DIR"
@@ -428,5 +452,13 @@ for entry_path in \
 done
 
 log_message "INFO" "Created and validated CLI and GUI desktop entries for $TARGET_USER."
+
+if [[ "${#DEPENDENCY_WARNINGS[@]}" -gt 0 ]]; then
+    echo -e "${RED}WARNING: Some dependencies could not be installed or verified:${NC}"
+    for warning in "${DEPENDENCY_WARNINGS[@]}"; do
+        echo " - $warning"
+    done
+    echo "Install or repair these dependencies manually if LinStressCPU does not start correctly."
+fi
 
 trap 'rm -rf "$TMP_DIR"' EXIT
