@@ -3,4 +3,4 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-exec python3.14 "$SCRIPT_DIR/src/LinStressGUI.py" "$@"
+exec python3 "$SCRIPT_DIR/src/LinStressGUI.py" "$@"
