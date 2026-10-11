@@ -17,4 +17,4 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     args+=("${line_args[@]}")
 done < "$ARGS_FILE"
 
-exec python3 "$SCRIPT_DIR/src/LinStress.py" "${args[@]}"
+exec python3.14 "$SCRIPT_DIR/src/LinStress.py" "${args[@]}"
